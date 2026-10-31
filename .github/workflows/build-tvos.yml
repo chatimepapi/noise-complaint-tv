@@ -1,15 +1,15 @@
-name: Build Noise Complaint for Sideloadly
+name: Build Mosh Workshop TV for Sideloadly
 on:
   workflow_dispatch:
     inputs:
       source_tag:
         description: Private release tag containing the reviewed source ZIP
         required: true
-        default: source-v1.1
+        default: source-v1.2
       source_asset:
         description: ZIP asset filename in that release
         required: true
-        default: NoiseComplaint-v1.1-AppleTV.zip
+        default: MoshWorkshopTV-v1.2-Source.zip
       source_sha256:
         description: SHA-256 of the reviewed source ZIP
         required: true
@@ -44,7 +44,7 @@ jobs:
           with zipfile.ZipFile(root/os.environ['NC_SOURCE_ASSET']) as z:
               for item in z.infolist():
                   p=pathlib.PurePosixPath(item.filename)
-                  assert not p.is_absolute() and '..' not in p.parts and p.parts[0]=='NoiseComplaint'
+                  assert not p.is_absolute() and '..' not in p.parts and p.parts[0]=='MoshWorkshopTV'
                   assert not stat.S_ISLNK(item.external_attr >> 16)
               z.extractall(root)
           PY
@@ -54,11 +54,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash "$RUNNER_TEMP/noise-source/NoiseComplaint/Tools/build-ipa.sh"
+          bash "$RUNNER_TEMP/noise-source/MoshWorkshopTV/Tools/build-ipa.sh"
       - uses: actions/upload-artifact@v7
         with:
-          name: NoiseComplaint-tvOS-unsigned
-          path: Output/NoiseComplaint-unsigned.ipa
+          name: MoshWorkshopTV-tvOS-unsigned
+          path: Output/MoshWorkshopTV-unsigned.ipa
           if-no-files-found: error
           retention-days: 3
           compression-level: 0
