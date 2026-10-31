@@ -1,0 +1,64 @@
+name: Build Noise Complaint for Sideloadly
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Private release tag containing the reviewed source ZIP
+        required: true
+        default: source-v1.1
+      source_asset:
+        description: ZIP asset filename in that release
+        required: true
+        default: NoiseComplaint-v1.1-AppleTV.zip
+      source_sha256:
+        description: SHA-256 of the reviewed source ZIP
+        required: true
+permissions:
+  contents: read
+jobs:
+  tvos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download the approved private source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NC_SOURCE_TAG: ${{ inputs.source_tag }}
+          NC_SOURCE_ASSET: ${{ inputs.source_asset }}
+          NC_SOURCE_SHA: ${{ inputs.source_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$NC_SOURCE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]
+          [[ "$NC_SOURCE_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]+\.zip$ ]]
+          [[ "$NC_SOURCE_SHA" =~ ^[a-fA-F0-9]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/noise-source"
+          gh release download "$NC_SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$NC_SOURCE_ASSET" --dir "$RUNNER_TEMP/noise-source"
+          echo "$NC_SOURCE_SHA  $RUNNER_TEMP/noise-source/$NC_SOURCE_ASSET" | shasum -a 256 -c -
+          python3 - <<'PY'
+          import os,pathlib,stat,zipfile
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'noise-source'
+          with zipfile.ZipFile(root/os.environ['NC_SOURCE_ASSET']) as z:
+              for item in z.infolist():
+                  p=pathlib.PurePosixPath(item.filename)
+                  assert not p.is_absolute() and '..' not in p.parts and p.parts[0]=='NoiseComplaint'
+                  assert not stat.S_ISLNK(item.external_attr >> 16)
+              z.extractall(root)
+          PY
+      - name: Compile the native tvOS app and package unsigned IPA
+        env:
+          NC_IPA_OUTPUT: ${{ github.workspace }}/Output
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/noise-source/NoiseComplaint/Tools/build-ipa.sh"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NoiseComplaint-tvOS-unsigned
+          path: Output/NoiseComplaint-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
